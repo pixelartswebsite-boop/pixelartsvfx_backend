@@ -56,28 +56,39 @@ router.post(
 
           const uploadResult = await uploadPromise;
 
+          // Generate a thumbnail if it's a video
+          let thumbnailUrl = null;
+          if (req.file.mimetype.startsWith("video/")) {
+            thumbnailUrl = cloudinary.url(uploadResult.public_id + ".jpg", {
+              resource_type: "video",
+              format: "jpg",
+              transformation: [{ width: 600, height: 400, crop: "fill" }], // adjust as needed
+            });
+          }
+
           // Save media record with Cloudinary URL
           const media = new Media({
             title: req.body.title,
             description: req.body.description,
             type: req.file.mimetype.startsWith("video/") ? "video" : "image",
             url: uploadResult.secure_url,
+            thumbnailUrl: thumbnailUrl || uploadResult.secure_url, // ✅ always populated
             tags: req.body.tags || [],
-            category: req.body.category || "showreel", // Default to showreel
+            category: req.body.category || "showreel",
             isActive: true,
             isFeatured: false,
             sortOrder: 0,
             viewCount: 0,
-            uploadedBy: req.admin._id, // Set by auth middleware
+            uploadedBy: req.admin._id,
             cloudinaryPublicId: uploadResult.public_id,
             metadata: {
-              uploadSource: "file-upload", // Changed to valid enum value
+              uploadSource: "file-upload",
               originalName: req.file.originalname,
               quality: "high",
             },
             seo: {
               keywords: req.body.keywords || [],
-              altText: req.body.title, // Use title as alt text
+              altText: req.body.title,
             },
             fileSize: req.file.size,
             mimeType: req.file.mimetype,
@@ -103,23 +114,28 @@ router.post(
         const media = new Media({
           title: req.body.title,
           description: req.body.description,
-          type: req.body.type || "image",
-          url: fileUrl,
+          type: req.file.mimetype.startsWith("video/") ? "video" : "image",
+          url: uploadResult.secure_url,
+          thumbnailUrl: thumbnailUrl || uploadResult.secure_url, // ✅ always populated
           tags: req.body.tags || [],
-          category: req.body.category || "showreel", // Default to showreel
+          category: req.body.category || "showreel",
           isActive: true,
           isFeatured: false,
           sortOrder: 0,
           viewCount: 0,
-          uploadedBy: req.admin._id, // Set by auth middleware
+          uploadedBy: req.admin._id,
+          cloudinaryPublicId: uploadResult.public_id,
           metadata: {
-            uploadSource: "url", // Changed to valid enum value
-            quality: "medium",
+            uploadSource: "file-upload",
+            originalName: req.file.originalname,
+            quality: "high",
           },
           seo: {
             keywords: req.body.keywords || [],
-            altText: req.body.title, // Use title as alt text
+            altText: req.body.title,
           },
+          fileSize: req.file.size,
+          mimeType: req.file.mimetype,
         });
 
         await media.save();
@@ -216,6 +232,19 @@ router.put(
           });
 
           const uploadResult = await uploadPromise;
+
+          if (req.file.mimetype.startsWith("video/")) {
+            media.thumbnailUrl = cloudinary.url(
+              uploadResult.public_id + ".jpg",
+              {
+                resource_type: "video",
+                format: "jpg",
+                transformation: [{ width: 600, height: 400, crop: "fill" }],
+              }
+            );
+          } else {
+            media.thumbnailUrl = uploadResult.secure_url;
+          }
 
           // Update media with new file info
           media.url = uploadResult.secure_url;
