@@ -62,6 +62,9 @@ const mediaSchema = new mongoose.Schema(
       enum: [
         "showreel",
         "ai-generation",
+        "movies", // Added for project movies
+        "series", // Added for project series
+        "posters", // Added for project posters
         "portfolio",
         "demo",
         "tutorial",
@@ -279,7 +282,7 @@ mediaSchema.pre("save", function (next) {
 
 // Post-save middleware for logging
 mediaSchema.post("save", function (doc) {
-  console.log(`📁 Media saved: ${doc.title} (${doc.type})`);
+  console.log(`📄 Media saved: ${doc.title} (${doc.type})`);
 });
 
 // Pre-remove middleware for cleanup
