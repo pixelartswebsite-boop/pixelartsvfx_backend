@@ -1,24 +1,52 @@
 const express = require("express");
 const nodemailer = require("nodemailer");
+const { google } = require("googleapis");
 require("dotenv").config();
 
 const router = express.Router();
 
-router.get("/test-mail", async (req, res) => {
+// OAuth2 configuration
+const oauth2Client = new google.auth.OAuth2(
+  process.env.GOOGLE_CLIENT_ID,
+  process.env.GOOGLE_CLIENT_SECRET,
+  process.env.GOOGLE_REDIRECT_URI
+);
+
+oauth2Client.setCredentials({
+  refresh_token: process.env.GOOGLE_REFRESH_TOKEN,
+});
+
+// Create reusable transporter
+const createTransporter = async () => {
   try {
-    const transporter = nodemailer.createTransport({
+    const accessToken = await oauth2Client.getAccessToken();
+
+    return nodemailer.createTransport({
       service: "gmail",
       auth: {
+        type: "OAuth2",
         user: process.env.MAIL_USER,
-        pass: process.env.MAIL_PASS,
+        clientId: process.env.GOOGLE_CLIENT_ID,
+        clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+        refreshToken: process.env.GOOGLE_REFRESH_TOKEN,
+        accessToken: accessToken.token,
       },
     });
+  } catch (err) {
+    console.error("Error creating mail transporter:", err);
+    throw err;
+  }
+};
+
+router.get("/test-mail", async (req, res) => {
+  try {
+    const transporter = await createTransporter();
 
     await transporter.sendMail({
       from: process.env.MAIL_USER,
       to: "pixelartswebsite@gmail.com",
       subject: "Test Email",
-      text: "This is a test email from Nodemailer.",
+      text: "This is a test email using OAuth2.",
     });
 
     res.send("Mail sent successfully!");
@@ -32,21 +60,13 @@ router.post("/send-mail", async (req, res) => {
   const { name, email, phone, comments } = req.body;
 
   try {
-    // Configure transporter
-    const transporter = nodemailer.createTransport({
-      service: "gmail",
-      auth: {
-        user: process.env.MAIL_USER, // your Gmail
-        pass: process.env.MAIL_PASS, // your App Password
-      },
-    });
+    const transporter = await createTransporter();
 
-    // Send mail
     await transporter.sendMail({
-      from: `"${name}" <${process.env.MAIL_USER}>`, // always your account
-      to: "pixelartswebsite@gmail.com", // receive in same account
-      replyTo: email, // 👈 important: replies go to visitor
-      subject: "New Contact Form Submission",
+      from: `"${name}" <${process.env.MAIL_USER}>`,
+      to: `${process.env.MAIL_USER}`,
+      replyTo: email,
+      subject: `New Contact Form Submission from ${name}`,
       html: `
         <h3>Contact Details</h3>
         <p><strong>Name:</strong> ${name}</p>
