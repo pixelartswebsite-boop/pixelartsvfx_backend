@@ -76,9 +76,13 @@ router.post("/send-mail", async (req, res) => {
       `,
     });
 
+    res.header("Access-Control-Allow-Origin", `${process.env.FRONTEND_URL}`);
+    res.header("Access-Control-Allow-Credentials", true);
     res.status(200).json({ message: "Mail sent successfully!" });
   } catch (err) {
     console.error("Error sending mail:", err);
+    res.header("Access-Control-Allow-Origin", `${process.env.FRONTEND_URL}`);
+    res.header("Access-Control-Allow-Credentials", true);
     res.status(500).json({ message: "Failed to send mail" });
   }
 });
