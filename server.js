@@ -46,7 +46,7 @@ app.use("/api/auth/", authLimiter);
 
 // CORS configuration
 const corsOptions = {
-  origin: process.env.FRONTEND_URL || "https://www.pixelartsvfx.com/",
+  origin: process.env.FRONTEND_URL || "https://www.pixelartsvfx.com",
   credentials: true,
   optionsSuccessStatus: 200,
 };
