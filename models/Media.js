@@ -115,10 +115,20 @@ const mediaSchema = new mongoose.Schema(
       clicks: { type: Number, default: 0 },
       shares: { type: Number, default: 0 },
     },
+    isHeroImage: { 
+    type: Boolean, 
+    default: false,
+    index: true // Add index for faster queries
+  },
+  
+  uploadDate: { type: Date, default: Date.now },
+  createdAt: { type: Date, default: Date.now },
+  updatedAt: { type: Date, default: Date.now }
   },
   {
     timestamps: true,
   }
+  
 );
 
 // Indexes for performance
@@ -264,8 +274,17 @@ mediaSchema.statics.searchMedia = function (query, options = {}) {
 };
 
 // Pre-save middleware
-mediaSchema.pre("save", function (next) {
+mediaSchema.pre("save", async function (next) {
   // Auto-generate alt text if not provided
+
+  if (this.isHeroImage && this.type === 'image') {
+    // If this is being set as hero image, unset all others
+    await this.constructor.updateMany(
+      { _id: { $ne: this._id } },
+      { isHeroImage: false }
+    );
+  }
+
   if (this.type === "image" && !this.seo.altText) {
     this.seo.altText = this.title;
   }
@@ -276,6 +295,8 @@ mediaSchema.pre("save", function (next) {
     const words = text.match(/\b\w{3,}\b/g) || [];
     this.seo.keywords = [...new Set(words)].slice(0, 10); // Unique words, max 10
   }
+
+  
 
   next();
 });

@@ -5,6 +5,7 @@ const cloudinary = require("cloudinary").v2;
 const Media = require("../models/Media");
 const { verifyToken, requireAdmin } = require("../middleware/auth");
 
+
 // Configure multer (in-memory storage)
 const storage = multer.memoryStorage();
 const upload = multer({ storage });
@@ -27,6 +28,15 @@ router.post(
   async (req, res) => {
     try {
       let fileUrl = req.body.url || null;
+      let isHeroImage = req.body.isHeroImage === 'true';
+      if (isHeroImage && req.file.mimetype.startsWith("image/")) {
+            // 2. Unset the hero flag on all other documents
+            await Media.updateMany({}, { isHeroImage: false });
+            console.log("POST /api/media: Unset previous hero images.");
+        } else if (isHeroImage && !req.file.mimetype.startsWith("image/")) {
+            // Prevent non-images from being set as hero
+            isHeroImage = false;
+        }
 
       // ✅ If a file is uploaded, push it to Cloudinary
       if (req.file) {
@@ -66,6 +76,8 @@ router.post(
             });
           }
 
+          
+
           // Save media record with Cloudinary URL
           const media = new Media({
             title: req.body.title,
@@ -75,6 +87,7 @@ router.post(
             thumbnailUrl: thumbnailUrl || uploadResult.secure_url, // ✅ always populated
             tags: req.body.tags || [],
             category: req.body.category || "showreel",
+            isHeroImage: isHeroImage,
             isActive: true,
             isFeatured: false,
             sortOrder: 0,
@@ -114,9 +127,9 @@ router.post(
         const media = new Media({
           title: req.body.title,
           description: req.body.description,
-          type: req.file.mimetype.startsWith("video/") ? "video" : "image",
-          url: uploadResult.secure_url,
-          thumbnailUrl: thumbnailUrl || uploadResult.secure_url, // ✅ always populated
+          type: req.body.type || "image",
+          url: req.body.url,
+          thumbnailUrl: req.body.url,
           tags: req.body.tags || [],
           category: req.body.category || "showreel",
           isActive: true,
@@ -124,18 +137,14 @@ router.post(
           sortOrder: 0,
           viewCount: 0,
           uploadedBy: req.admin._id,
-          cloudinaryPublicId: uploadResult.public_id,
           metadata: {
-            uploadSource: "file-upload",
-            originalName: req.file.originalname,
+            uploadSource: "url",
             quality: "high",
           },
           seo: {
             keywords: req.body.keywords || [],
             altText: req.body.title,
           },
-          fileSize: req.file.size,
-          mimeType: req.file.mimetype,
         });
 
         await media.save();
@@ -192,6 +201,21 @@ router.put(
   async (req, res) => {
     try {
       const media = await Media.findById(req.params.id);
+      let newIsHeroImage = req.body.isHeroImage === 'true'; 
+
+        // --- START NEW/UPDATED LOGIC for PUT ---
+        // Determine if the media item is, or will be, an image
+        const isImage = media.type === 'image' || (req.file && req.file.mimetype.startsWith("image/"));
+
+        // Check if hero status is changing to true
+        if (newIsHeroImage && isImage) {
+            // Unset the hero flag on all other documents
+            await Media.updateMany({}, { isHeroImage: false });
+            console.log("PUT /api/media: Unset previous hero images during update.");
+        } else if (newIsHeroImage && !isImage) {
+            // Prevent non-images from being set as hero
+            newIsHeroImage = false;
+        }
 
       if (!media) {
         return res.status(404).json({
@@ -271,7 +295,7 @@ router.put(
       if (req.body.isActive !== undefined) media.isActive = req.body.isActive;
       if (req.body.isFeatured !== undefined)
         media.isFeatured = req.body.isFeatured;
-
+      if (req.body.isHeroImage) media.isHeroImage = newIsHeroImage; 
       // Update metadata and SEO
       if (req.body.metadata) {
         media.metadata = {
@@ -345,6 +369,77 @@ router.delete("/:id", verifyToken, requireAdmin, async (req, res) => {
       message: "Failed to delete media",
       error: error.message,
     });
+  }
+});
+
+// @desc    Get hero image
+// @route   GET /api/media/hero-image
+// @access  Public
+router.get("/hero-image", async (req, res) => {
+  try {
+    // Find the one media item where isHeroImage is true
+    const heroImage = await Media.findOne({ isHeroImage: true, isActive: true }); 
+
+    if (!heroImage) {
+      // Return a 200 with success: false to trigger fallback on client
+      return res.status(200).json({ success: false, message: "No hero image set" });
+    }
+
+    res.json({
+      success: true,
+      image: {
+        url: heroImage.url,
+        title: heroImage.title,
+        description: heroImage.description
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching hero image:', error);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+// @desc    Set hero image
+// @route   POST /api/media/hero-image
+// @access  Private (admin)
+router.post('/hero-image', verifyToken, requireAdmin, async (req, res) => {
+  try {
+    const { mediaId } = req.body;
+
+    if (!mediaId) {
+      return res.status(400).json({ success: false, message: 'Media ID is required' });
+    }
+
+    // Find the media item
+    const media = await Media.findById(mediaId);
+    
+    if (!media) {
+      return res.status(404).json({ success: false, message: 'Media not found' });
+    }
+
+    if (media.type !== 'image') {
+      return res.status(400).json({ success: false, message: 'Only images can be set as hero image' });
+    }
+
+    // Remove hero image flag from all other media
+    await Media.updateMany({}, { isHeroImage: false });
+
+    // Set the new hero image
+    media.isHeroImage = true;
+    await media.save();
+
+    res.json({
+      success: true,
+      message: 'Hero image updated successfully',
+      image: {
+        id: media._id,
+        url: media.url,
+        title: media.title
+      }
+    });
+  } catch (error) {
+    console.error('Error setting hero image:', error);
+    res.status(500).json({ success: false, message: 'Server error' });
   }
 });
 
