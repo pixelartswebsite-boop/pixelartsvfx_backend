@@ -65,6 +65,7 @@ const mediaSchema = new mongoose.Schema(
         "movies", // Added for project movies
         "series", // Added for project series
         "posters", // Added for project posters
+        'hero-image',
         "portfolio",
         "demo",
         "tutorial",
